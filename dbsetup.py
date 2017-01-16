@@ -14,6 +14,7 @@ class Movie(Base):
 	omonth=Column(String)
 	oyear=Column(String)
 	title=Column(String)
+	link=Column(String)
 	genre=Column(String)
 	director=Column(String)
 
