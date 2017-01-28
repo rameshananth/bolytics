@@ -17,6 +17,13 @@ class Movie(Base):
 	link=Column(String)
 	genre=Column(String)
 	director=Column(String)
+	def __str__(self):
+                sSelf="<<Created on: "+str(self.odate)+"-"+str(self.omonth)+"-"+str(self.oyear)+","
+                sSelf=sSelf+"Title:"+str(self.title)+","
+                sSelf=sSelf+"Link:"+str(self.link)+","
+                sSelf=sSelf+"Genre:"+str(self.genre)+","
+                sSelf=sSelf+"Director:"+str(self.director)+">>"
+                return sSelf
 
 class Actor(Base):
 	__tablename__='actors'
@@ -31,7 +38,7 @@ class Character(Base):
 	played_by=Column(Integer,ForeignKey('actors.id'))
 
 try:
-	engine=create_engine('sqlite:///bolytics',echo=True)
+	engine=create_engine('sqlite:///bolytics.sqlite3',echo=True)
 	Base.metadata.create_all(engine)
 except:
 	print "Unexpected error:",sys.exc_info()[0]
