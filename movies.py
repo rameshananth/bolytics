@@ -3,6 +3,8 @@ from lxml import html
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from dbsetup import Base, Movie
+from tqdm import *
+import pdb
 
 def sMakeASession(filename):
         #setup the db session
@@ -12,6 +14,24 @@ def sMakeASession(filename):
         session=DBSession()
         return session
 
+def isTitle(col):
+        if col.text_content()=="Name" or col.text_content()=="Title":
+                return True
+        else:
+                return False
+
+def makeLink(col):
+        #print list(col.iterlinks())
+        if list(col.iterlinks()):
+                return list(col.iterlinks())[0][2]
+        else:
+                return ''
+
+def checkSpanning(col):
+        if col.get('colspan'):
+                return True
+        else:
+                return False
 
 def parseTable(table,year):
         """
@@ -27,22 +47,20 @@ def parseTable(table,year):
         #Wikipedia has three types of tables to describe movies
         #wikitable which can describe the movies or the ranking of the movies
         #wikitable javascript-sorter which can describe the
+        #pdb.set_trace()
         counter=0
         spanning=False
         rows=table.xpath('.//tr')
         aMovies=[]
+        aHeaders=[]
         for r in rows:
                 if counter==0:
                         aHeaders=r.xpath('.//th')
                         #print "Header has ",len(aHeaders),"columns"
                         raHeaders=list(reversed(aHeaders))
                         iOpeningXpath=1
-                        if aHeaders[0].get('colspan'):
-                                spanning=True
-                                #raHeaders=list(reversed(aHeaders))
-                        else:
-                                spanning=False
-                        #keys=[h.text_content for h in aHeaders]
+                        if aHeaders:
+                                spanning=checkSpanning(aHeaders[0])
                         next
                 counter=counter+1
                 dMovie={}
@@ -51,32 +69,22 @@ def parseTable(table,year):
                 rCols=list(reversed(cols))
                 #print "Row :",r.text_content()," has ",len(cols),"no. of cols:"
                 if spanning==True:
-                        iRange=min(len(cols),len(aHeaders))
+                        iRange=min(len(cols),len(raHeaders))
                         for i in range(0,iRange):
                                 #print "Mapping :",raHeaders[i].text_content()," to ",rCols[i].text_content()
+                                if isTitle(raHeaders[i]):
+                                        dMovie['link']=makeLink(rCols[i])
                                 dMovie[raHeaders[i].text_content()]=rCols[i].text_content()
-                                if raHeaders[i].text_content()=='Title' or raHeaders[i].text_content()=='Name': 
-                                        #print list(rCols[i].iterlinks())
-                                        if list(rCols[i].iterlinks()):
-                                                dMovie['link']=list(rCols[i].iterlinks())[0][2]
-                                        else:
-                                                dMovie['link']=''
                                 dMovie['Opening']=str(year)
-                                #First let's take care of all opening entries
-                                #print dMovie
-                                #aMovies.append(dMovie)
                 else:
                         for i in range(0,len(cols)):
+                                #pdb.set_trace()
+                                #print [h.text_content() for h in aHeaders]
+                                #print i
+                                if isTitle(aHeaders[i]):
+                                        dMovie['link']=makeLink(cols[i])
                                 dMovie[aHeaders[i].text_content()]=cols[i].text_content()
-                                if aHeaders[i].text_content()=='Title' or raHeaders[i].text_content()=='Name':
-                                        #print list(rCols[i].iterlinks())
-                                        if list(cols[i].iterlinks()):
-                                                dMovie['link']=list(cols[i].iterlinks())[0][2]
-                                        else:
-                                                dMovie['link']=''
-                                #print dMovie
-                                #aMovies.append(dMovie)
-                print dMovie
+                #print dMovie
                 if dMovie:
                         aMovies.append(dMovie)
         return aMovies
@@ -85,14 +93,30 @@ def parseTable(table,year):
 def makeAMovie(dMovie,year):
         #If the movie string begins with a \n remove all text right upto the next \n"
         #Using get to avoid no link being present and key zero
+        #print dMovie.get('Opening')
+        sTitle=''
+        oYear=oDate=oMonth=''
         if dMovie.get('Title'):
-                title=dMovie['Title']
+                sTitle=dMovie['Title']
+        elif dMovie.get('Name'):
+                sTitle=dMovie['Name']
+        if dMovie.get('Opening')==str(year):
+                oYear=year
+                oDate=''
+                oMonth=''
+        elif dMovie.get('Opening'):
+                sOpening=dMovie.get('Opening')
+                sOpening=sOpening.strip('0'*8)
+                oYear=sOpening[0:4]
+                oMonth=sOpening[5:7]
+                oDate=sOpening[8:10]
+                #print dMovie['Opening']
         else:
-                title=dMovie['Name']
-        if dMovie.get('Opening')==0:
-                dMovie['Opening']=year
-        m=Movie(title=title,director=dMovie['Director'],genre=dMovie['Genre'],
-                odate=dMovie['Opening'],oyear=dMovie['Opening'],omonth=dMovie['Opening'],link=dMovie['link']
+                oYear=year
+                oDate=''
+                oMonth=''
+        m=Movie(title=sTitle,director=dMovie.get('Director'),genre=dMovie.get('Genre'),
+                odate=oDate,oyear=oYear,omonth=oMonth,link=dMovie.get('link')
                 )
         return m
                 
@@ -123,19 +147,23 @@ def getTablesOfMovies(year,prefix):
         
 def populateMovies(startyear,endyear):
         session=sMakeASession('bolytics.sqlite3')
-        for x in range(startyear,endyear):
-                print "Parsing year:",x
-                atMovies=getTablesOfMovies(x,sPagePrefix)
+        for z in tqdm(range(startyear,endyear)):
+                #print "Parsing year:",z
+                atMovies=getTablesOfMovies(z,sPagePrefix)
                 for x in range(0,len(atMovies)):
-                        print "Parsing table:" ,x
+                        #print "Parsing table:" ,x+1
                         table=atMovies[x]
-                        adMovies=parseTable(table,x)
+                        if z in range(1940,1970) and x==0:
+                                #print "Skipping the top grosser table for:",z 
+                                #Skip the top-grossing table
+                                continue
+                        adMovies=parseTable(table,z)
                         #print headers
                         for y in range(0,len(adMovies)):
                                 #sMovie=asMovies[y
-                                movie=makeAMovie(adMovies[y],x)
-                                print "Parsing movie no.:",y
-                                print "Movie is: ",movie
+                                movie=makeAMovie(adMovies[y],z)
+                                #print "Parsing movie no.:",y
+                                #print "Movie is: ",movie
                                 if movie:
                                         session.add(movie)
                                 session.commit()
